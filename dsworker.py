@@ -9,7 +9,7 @@ SRC_S3 = 'dataset_storage'
 
 class DataWorker:
 
-    def __init__(self, s3_client, path, name, version=None):
+    def __init__(self, s3_client, path=None, name=None, version=None):
         """
             path - полный путь до папки с экспериментом.
             name - имя эксперимента
@@ -19,8 +19,9 @@ class DataWorker:
         self.client = s3_client
         self.LOCAL = path
         self.experiment_name = name
-        self.src = Path(self.LOCAL) / self.experiment_name
-        self.classes = self._set_classnames()
+        self.src = Path(self.LOCAL) / self.experiment_name if path else None
+        self.classes = self._set_classnames() if path else None
+        # устанавливается следующий номер версии
         self.version = version if version else self.new_version_number()
         # self.version = version if version else self.existing_versions()
 
@@ -301,3 +302,47 @@ class DataWorker:
             target_fig_path = Path(SRC_S3)/self.experiment_name/f'models/v{self.version}/{fig.name}'
             S3.upload_file(str(fig), BUCKET, str(target_fig_path))
         print("Figures uploaded to S3!")
+
+    def register_model(self, run_id: str, exp_id: int):
+        """
+        по заданному айди запуска и айди эксперимента
+        определяет папку на S3 из которой нужно вытащит
+        export.pkl и скопировать его в другую папку на S3
+        где лежат только прод модели
+
+        Как юзать:
+
+        import boto3
+        S3 = boto3.client('s3')
+        DataWorker(S3).register_model(run_id='ebe4db8489c94c999c5fdc81e8cd5b7e', exp_id=3)
+
+        """
+
+        #TODO: придумать что-то поизящнее :/
+        exp_names = {0: 'upadupa',
+                     1: 'nowtest',
+                     2: 'tech',
+                     3: 'imagetype'}
+
+        from botocore.errorfactory import ClientError
+        BUCKET = 'barbacane-ml'
+        S3 = self.client
+        s3_path = os.path.join('mlruns', str(exp_id), run_id, 'artifacts', 'export.pkl')
+        try:
+            S3.head_object(Bucket=BUCKET, Key=s3_path)
+            copy_source = {
+                'Bucket': BUCKET,
+                'Key': s3_path
+            }
+            prod_key = os.path.join('prodmodels', exp_names[exp_id], 'export.pkl')
+            S3.copy_object(CopySource=copy_source, Bucket=BUCKET, Key=prod_key)
+            print("model was registered as prod! ")
+        except ClientError as e:
+            if e.response['Error']['Code'] == "404":
+                print('model not found')
+
+
+if __name__ == "__main__":
+    import boto3
+    S3 = boto3.client('s3')
+    DataWorker(S3).register_model(run_id='ebe4db8489c94c999c5fdc81e8cd5b7e', exp_id=3)
