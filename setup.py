@@ -4,12 +4,12 @@ with open("README.md", "r") as fh:
 setuptools.setup(
      name='tvml',
      version='0.1',
-     scripts=['tvml'] ,
+     scripts=['tvml'],
      author="Pazlvbanke",
      author_email="pazlvbanke@yandex.ru",
      description="Uhaha",
      long_description=long_description,
-   long_description_content_type="text/markdown",
+     long_description_content_type="text/markdown",
      url="https://github.com/trendvision/tvml",
      packages=setuptools.find_packages(),
      classifiers=[
