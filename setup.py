@@ -10,7 +10,7 @@ setuptools.setup(
      description="Uhaha",
      long_description=long_description,
    long_description_content_type="text/markdown",
-     url="https://github.com/pazlvbanke/dsworker",
+     url="https://github.com/trendvision/tvml",
      packages=setuptools.find_packages(),
      classifiers=[
          "Programming Language :: Python :: 3",
