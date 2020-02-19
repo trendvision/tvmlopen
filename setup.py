@@ -2,12 +2,12 @@ import setuptools
 with open("README.md", "r") as fh:
     long_description = fh.read()
 setuptools.setup(
-     name='tvmlopen',
-     version='0.1',
+     name='tvml',
+     version='0.1.1',
      packages=['tvml'],
      author="Pazlvbanke",
      author_email="pazlvbanke@yandex.ru",
-     description="Uhaha",
+     description="Package for everything",
      long_description=long_description,
      long_description_content_type="text/markdown",
      url="https://github.com/trendvision/tvml",
