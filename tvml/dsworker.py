@@ -342,7 +342,7 @@ class DataWorker:
                 print('model not found')
 
 
-if __name__ == "__main__":
-    import boto3
-    S3 = boto3.client('s3')
-    DataWorker(S3).register_model(run_id='ebe4db8489c94c999c5fdc81e8cd5b7e', exp_id=3)
+# if __name__ == "__main__":
+#     import boto3
+#     S3 = boto3.client('s3')
+#     DataWorker(S3).register_model(run_id='ebe4db8489c94c999c5fdc81e8cd5b7e', exp_id=3)
