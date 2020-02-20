@@ -3,7 +3,6 @@ from pathlib import Path
 import re
 
 
-MACOS = True
 BUCKET = 'disk-barbacane-test'
 SRC_S3 = 'dataset_storage'
 
@@ -33,7 +32,8 @@ class DataWorker:
     @staticmethod
     def remove_dstore(src_dir):
         """ Нужно только для макоси """
-        if not MACOS: return
+        from sys import platform
+        if platform != 'darwin': return
         for filename in Path(src_dir).rglob('.DS_Store'):
             print("REMOVE >>>", filename)
             os.remove(filename)
