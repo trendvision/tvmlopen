@@ -9,9 +9,11 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
     Usage:
         path_to_model = 'folder/with/export.pkl'
         path_to_dir = 'folder/with'
+        
+        # load model
         learner = load_learner_from_dir(path_to_dir)
         
-        # any type of predict
+        # predict
         pred = predict_from_url(learner, url)
 """
 
@@ -42,7 +44,7 @@ def predict_from_directory(learner, image_directory):
             pred_dict[sample] = None
             continue
         pred, _, _ = learner.predict(img)
-        pred_dict[sample] = pred
+        pred_dict[str(sample)] = str(pred)
     return pred_dict
 
 
