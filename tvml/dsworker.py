@@ -44,7 +44,9 @@ class DataWorker:
     def _set_classnames(self):
         self.remove_dstore(self.src)
         pattern = re.compile("v\d+")
-        classes = [x for x in os.listdir(self.src) if not pattern.match(x) and "dataset" not in x]
+        classes = [x for x in os.listdir(self.src) if not pattern.match(x) \
+                   and "models" not in x \
+                   and os.path.isdir(self.src / x)]
         return classes
 
     def _class_digest(self, class_dir, version=None):
@@ -164,13 +166,18 @@ class DataWorker:
         self.upload_changes(files=digest_file_paths)
 
     def _update_local(self):
-        """ переместить в S3 картинки которые поменяли класс """
+        """ удалить с локалки лишние картинки
+        Такое бывает когда, например, в предыдущем эксперименте
+        использовали новую версию, а в текущем эксперименте
+        старую версию датасета. В старом датасете может быть
+        меньше картинок чем в новой и лишнее нужно удалять """
+
         print("removing deprecated images from local ...")
         todel_mapping = self.diff_mapping()
         for cls, images in todel_mapping.items():
             if len(images) == 0: continue
             for img in images:
-                key = os.path.join(SRC_S3, self.experiment_name, cls, img)
+                key = os.path.join(self.LOCAL, self.experiment_name, cls, img)
                 os.remove(key)
                 print("remove from S3 >> ", cls, img)
         print("done!")
@@ -249,8 +256,8 @@ class DataWorker:
                                                       f'v{version}'))['Contents']
         digest_files_s3 = [x['Key'] for x in request if x['Key'].endswith(".dgst")]
 
-        already_loaded = filter(lambda x: x.suffix in ['.png', '.jpg'],
-                                (Path(self.LOCAL) / self.experiment_name).glob('**/*'))
+        # already_loaded = filter(lambda x: x.suffix in ['.png', '.jpg'],
+        #                         (Path(self.LOCAL) / self.experiment_name).glob('**/*'))
 
         for key in digest_files_s3:
             # read digest files and get the list of image names
@@ -265,15 +272,6 @@ class DataWorker:
             # classname = classname.replace('.dgst', '')
             class_path = os.path.join(self.LOCAL, self.experiment_name, classname)
             os.makedirs(class_path, exist_ok=True)
-
-            def rm_image(p):
-                os.remove(p)
-                print("removed deprecated  > ", p.name)
-
-            # remove existing images which are not needed
-            # in the given ds-version
-            if deprecated:
-                [rm_image(x) for x in already_loaded if x.name not in img_names]
 
             # download images
             img_keys = [Path(SRC_S3)/f"{self.experiment_name}/{classname}/{img}" for img in img_names]
@@ -295,25 +293,24 @@ class DataWorker:
         S3 = self.client
         model_path = self.src/'export.pkl'
         target_model_path = Path(SRC_S3)/self.experiment_name/f'models/v{self.version}/{model_path.name}'
-        figures_path = (self.src/'models').rglob('fig*')
-        print("Model is uploaded to S3!")
-
         S3.upload_file(str(model_path), BUCKET, str(target_model_path))
-        for fig in figures_path:
-            target_fig_path = Path(SRC_S3)/self.experiment_name/f'models/v{self.version}/{fig.name}'
-            S3.upload_file(str(fig), BUCKET, str(target_fig_path))
-        print("Figures uploaded to S3!")
+        print("Model has been uploaded to S3!")
+
+        # figures_path = (self.src / 'models').rglob('**/*')
+        # for fig in figures_path:
+        #     target_fig_path = Path(SRC_S3)/self.experiment_name/f'models/v{self.version}/{fig.name}'
+        #     S3.upload_file(str(fig), BUCKET, str(target_fig_path))
+        # print("Intermediate models has been uploaded to S3!")
 
     @staticmethod
     def experiments_info(host=None):
-        tracking_uri = "http://18.224.52.157:5000" if not host \
-            else "http://" + host
+        tracking_uri = "http://18.224.52.157:5000" if not host else host
 
         mlflow.tracking.set_tracking_uri(tracking_uri)
         cli = mlflow.tracking.MlflowClient()
-        return {x.experiment_id: x.name for x in cli.list_experiments()}
+        return {int(x.experiment_id): x.name for x in cli.list_experiments()}
 
-    def pull_model(self, experiment_name):
+    def pull_model(self, experiment_name, targ_path=None):
         BUCKET = 'barbacane-ml'
         S3 = self.client
 
@@ -323,6 +320,7 @@ class DataWorker:
 
         model_path = [obj['Key'] for obj in sorted(request, key=lambda x: x['LastModified'])][0]
         model_name = model_path.split("/")[-1]
+        if targ_path: model_name = os.path.join(targ_path, model_name)
         S3.download_file(BUCKET, model_path, model_name)
         print(model_name, "downloaded successfully")
         return model_name
@@ -360,13 +358,14 @@ class DataWorker:
                 print('model not found')
 
 
-if __name__ == "__main__":
-    import boto3
-    S3 = boto3.client('s3')
-    
-    p = '/Users/alinacodzy/Downloads/EXPERIMENTS/TECH'
-    DataWorker(S3).experiments_info()
-    # DataWorker(S3).pull_model('ssdgraph')
-    # DataWorker(S3, path=p, name='EXP-TECH', version=3).update()
+# if __name__ == "__main__":
+#     import boto3
+#     S3 = boto3.client('s3')
+#
+#     p = '/Users/alinacodzy/Downloads/EXPERIMENTS/TEST'
+#     # DataWorker(S3).experiments_info()
+#     # DataWorker(S3).pull_model('ssdgraph')
+#     # DataWorker(S3, path=p, name='EXP-TECH', version=3).update()
+#     # DataWorker(S3).register_model(run_id='ebe4db8489c94c999c5fdc81e8cd5b7e', exp_id=3)
+#     DataWorker(S3, p, 'EXP-IMG-TYPE', 2).download()
 
-    # DataWorker(S3).register_model(run_id='ebe4db8489c94c999c5fdc81e8cd5b7e', exp_id=3)
