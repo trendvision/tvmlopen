@@ -3,7 +3,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 setuptools.setup(
      name='tvml',
-     version='0.1.6',
+     version='0.1.6.1',
      packages=['tvml'],
      author="Pazlvbanke",
      author_email="pazlvbanke@yandex.ru",
@@ -18,3 +18,11 @@ setuptools.setup(
          "Operating System :: OS Independent",
      ],
  )
+
+install_requires = [
+    'boto3',
+    'mlflow'
+]
+
+if __name__ == '__main__':
+    setup(**setup_args, install_requires=install_requires)

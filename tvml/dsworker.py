@@ -1,10 +1,12 @@
 import os
 from pathlib import Path
 import re
+import mlflow
 
 
 BUCKET = 'disk-barbacane-test'
 SRC_S3 = 'dataset_storage'
+
 
 class DataWorker:
 
@@ -23,6 +25,7 @@ class DataWorker:
         # устанавливается следующий номер версии
         self.version = version if version else self.new_version_number()
         # self.version = version if version else self.existing_versions()
+
 
     def __repr__(self):
         return f"experiment :  {self.experiment_name}\n" \
@@ -122,7 +125,6 @@ class DataWorker:
                 S3.copy(CopySource=copy_source, Bucket=BUCKET, Key=str(targ))
                 print(targ)
 
-
     def _compress_dataset(self):
         from shutil import make_archive
 
@@ -184,6 +186,7 @@ class DataWorker:
             digest_data = obj['Body'].read()
             img_names = digest_data.decode().split('\n')
             return img_names
+
         return {cls: read_digest_file(cls) for cls in self.classes}
 
     def _s3_file_mapping(self):
@@ -233,16 +236,14 @@ class DataWorker:
         """ downloads given version of dataset from S3
 
             - version - если не указать версию, то скачается последняя
-            ВАЖНО: сейчас последняя версия определяется по той папке
-            что лежит на локалке.
             TODO: Переделать узнавание высшей версии на запрос к S3
 
         """
         # удаляем с локалки все, что не соответствует текущей версии
         S3 = self.client
-        self._update_local()
+        if deprecated: self._update_local()
 
-        if not version: version = self.new_version_number() - 1
+        if not version: version = self.version
         request = S3.list_objects(Bucket=BUCKET,
                                   Prefix=os.path.join(SRC_S3, self.experiment_name,
                                                       f'v{version}'))['Contents']
@@ -303,6 +304,29 @@ class DataWorker:
             S3.upload_file(str(fig), BUCKET, str(target_fig_path))
         print("Figures uploaded to S3!")
 
+    @staticmethod
+    def experiments_info(host=None):
+        tracking_uri = "http://18.224.52.157:5000" if not host \
+            else "http://" + host
+
+        mlflow.tracking.set_tracking_uri(tracking_uri)
+        cli = mlflow.tracking.MlflowClient()
+        return {x.experiment_id: x.name for x in cli.list_experiments()}
+
+    def pull_model(self, experiment_name):
+        BUCKET = 'barbacane-ml'
+        S3 = self.client
+
+        model_path = os.path.join('prodmodels', experiment_name)
+        request = filter(lambda x: not x['Key'].endswith('/'),
+                         S3.list_objects(Bucket=BUCKET, Prefix=model_path)['Contents'])
+
+        model_path = [obj['Key'] for obj in sorted(request, key=lambda x: x['LastModified'])][0]
+        model_name = model_path.split("/")[-1]
+        S3.download_file(BUCKET, model_path, model_name)
+        print(model_name, "downloaded successfully")
+        return model_name
+
     def register_model(self, run_id: str, exp_id: int):
         """
         по заданному айди запуска и айди эксперимента
@@ -317,17 +341,11 @@ class DataWorker:
         DataWorker(S3).register_model(run_id='ebe4db8489c94c999c5fdc81e8cd5b7e', exp_id=3)
 
         """
-
-        #TODO: придумать что-то поизящнее :/
-        exp_names = {0: 'upadupa',
-                     1: 'nowtest',
-                     2: 'tech',
-                     3: 'imagetype'}
-
         from botocore.errorfactory import ClientError
         BUCKET = 'barbacane-ml'
         S3 = self.client
         s3_path = os.path.join('mlruns', str(exp_id), run_id, 'artifacts', 'export.pkl')
+        exp_names = self.experiments_info()
         try:
             S3.head_object(Bucket=BUCKET, Key=s3_path)
             copy_source = {
@@ -342,7 +360,13 @@ class DataWorker:
                 print('model not found')
 
 
-# if __name__ == "__main__":
-#     import boto3
-#     S3 = boto3.client('s3')
-#     DataWorker(S3).register_model(run_id='ebe4db8489c94c999c5fdc81e8cd5b7e', exp_id=3)
+if __name__ == "__main__":
+    import boto3
+    S3 = boto3.client('s3')
+    
+    p = '/Users/alinacodzy/Downloads/EXPERIMENTS/TECH'
+    DataWorker(S3).experiments_info()
+    # DataWorker(S3).pull_model('ssdgraph')
+    # DataWorker(S3, path=p, name='EXP-TECH', version=3).update()
+
+    # DataWorker(S3).register_model(run_id='ebe4db8489c94c999c5fdc81e8cd5b7e', exp_id=3)
