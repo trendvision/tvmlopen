@@ -289,10 +289,13 @@ class DataWorker:
                     print(e, key)
                     continue
 
-    def export_model_to_s3(self):
+    def export_model_to_s3(self, model_path=None):
+        BUCKET = 'disk-barbacane-test'
         S3 = self.client
-        model_path = self.src/'export.pkl'
-        target_model_path = Path(SRC_S3)/self.experiment_name/f'models/v{self.version}/{model_path.name}'
+
+        model_path = Path(model_path) if model_path else self.src / 'export.pkl'
+        target_model_path = Path(SRC_S3) / self.experiment_name / f'models/v{self.version}/{model_path.name}'
+
         S3.upload_file(str(model_path), BUCKET, str(target_model_path))
         print("Model has been uploaded to S3!")
 
