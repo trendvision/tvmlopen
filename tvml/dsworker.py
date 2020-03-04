@@ -378,14 +378,14 @@ class DataWorker:
                 print('model not found')
 
 
-if __name__ == "__main__":
-    import boto3
-    S3 = boto3.client('s3')
-
-    p = '/Users/alinacodzy/Downloads/EXPERIMENTS/TEST'
-    # DataWorker(S3).experiments_info()
-    # DataWorker(S3).pull_model('ssdgraph')
-    # DataWorker(S3, path=p, name='EXP-TECH', version=3).update()
-    # DataWorker(S3).register_model(run_id='ebe4db8489c94c999c5fdc81e8cd5b7e', exp_id=3)
-    DataWorker(S3, p, 'EXP-IMG-TYPE', 3).download(deprecated=False)
+# if __name__ == "__main__":
+#     import boto3
+#     S3 = boto3.client('s3')
+#
+#     p = '/Users/alinacodzy/Downloads/EXPERIMENTS/TEST'
+#     # DataWorker(S3).experiments_info()
+#     # DataWorker(S3).pull_model('ssdgraph')
+#     # DataWorker(S3, path=p, name='EXP-TECH', version=3).update()
+#     # DataWorker(S3).register_model(run_id='ebe4db8489c94c999c5fdc81e8cd5b7e', exp_id=3)
+#     DataWorker(S3, p, 'EXP-IMG-TYPE', 3).download(deprecated=False)
 
