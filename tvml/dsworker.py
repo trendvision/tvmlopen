@@ -179,7 +179,7 @@ class DataWorker:
         make_archive(self.src/archive_name, 'zip', self.src/'dataset')
         return archive_name
 
-    def upload_changes(self, files):
+    def upload_changes(self, files, workers=4):
         #TODO add multiprocessing
         S3 = self.client
         print("uploading changes to S3 ...")
@@ -190,12 +190,27 @@ class DataWorker:
         stored_images = [Path(x['Key']).name for x in request]
         images = [str(x) for x in self.src.glob('**/*') if x.parent.name in self.classes]
 
-        for i, img in enumerate(images):
-            s3_key = os.path.join(SRC_S3, img.replace(self._LOCAL+'/', ""))
-
-            if img.split('/')[-1] in stored_images: continue
+        def multy_upload(args):
+            i, key = args
+            s3_key = os.path.join(SRC_S3, key.replace(self._LOCAL + '/', ""))
+            if key.split('/')[-1] in stored_images: return
             S3.upload_file(str(img), BUCKET, s3_key)
-            print(f"{i}/{len(images)} upl >> ", Path(img).name)
+            print(f"{i}/{len(images)} upl >> ", Path(key).name)
+            return
+
+        from multiprocessing.pool import ThreadPool
+
+        pool = ThreadPool(processes=workers)
+        pool.map(multy_upload, enumerate(images))
+        pool.close()
+        print('Uploaded!')
+
+        # for i, img in enumerate(images):
+        #     s3_key = os.path.join(SRC_S3, img.replace(self._LOCAL+'/', ""))
+        #
+        #     if img.split('/')[-1] in stored_images: continue
+        #     S3.upload_file(str(img), BUCKET, s3_key)
+        #     print(f"{i}/{len(images)} upl >> ", Path(img).name)
         print('done !')
 
     def update(self):
@@ -291,7 +306,7 @@ class DataWorker:
         self._compose_dataset(version)
         self._compress_dataset(version)
 
-    def download(self, version=None, deprecated=True):
+    def download(self, version=None, deprecated=True, workers=4):
         """ downloads given version of dataset from S3
 
             - version - если не указать версию, то скачается последняя
@@ -340,7 +355,7 @@ class DataWorker:
 
             from multiprocessing.pool import ThreadPool
 
-            pool = ThreadPool(processes=4)
+            pool = ThreadPool(processes=workers)
             pool.map(multy_load, img_keys)
             pool.close()
             print('Downloaded!')
