@@ -1,7 +1,7 @@
 import setuptools
 with open("README.md", "r") as fh:
     long_description = fh.read()
-setuptools.setup(
+setup_args = dict(
      name='tvml',
      version='0.1.6.2',
      packages=['tvml'],
@@ -25,4 +25,4 @@ install_requires = [
 ]
 
 if __name__ == '__main__':
-    setup(**setup_args, install_requires=install_requires)
+    setuptools.setup(**setup_args, install_requires=install_requires)

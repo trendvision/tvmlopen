@@ -206,7 +206,6 @@ class DataWorker:
                     print('Digest file is not found on S3. Probably \
                     current version doesn\'t contain class %s' %class_name)
 
-
         return {cls: read_digest_file(cls) for cls in self.classes}
 
     def _s3_file_mapping(self):
@@ -324,7 +323,7 @@ class DataWorker:
 
     @staticmethod
     def experiments_info(host=None):
-        tracking_uri = "http://18.224.52.157:5000" if not host else host
+        tracking_uri = "http://3.136.68.130:5000" if not host else host
 
         mlflow.tracking.set_tracking_uri(tracking_uri)
         cli = mlflow.tracking.MlflowClient()
