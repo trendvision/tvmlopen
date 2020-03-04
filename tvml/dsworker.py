@@ -18,17 +18,55 @@ class DataWorker:
             точно так же как и сам класс
         """
         self.client = s3_client
-        self.LOCAL = path
+        self._LOCAL = path
         self.experiment_name = name
-        self.src = Path(self.LOCAL) / self.experiment_name if path else None
         self.version = version if version else self.new_version_number()
+
+        self.src = Path(self._LOCAL) / self.experiment_name if path else None
         self.classes = self._set_classnames_s3() if version else None
 
+        self._pull_digest()
 
     def __repr__(self):
         return f"experiment :  {self.experiment_name}\n" \
                f"   version :  {self.version}\n" \
                f"   classes :  {self.classes}\n"
+
+    def _pull_digest(self):
+        hidden_dir = os.path.join(self._LOCAL, '.dsworker')
+        os.makedirs(hidden_dir, exist_ok=True)
+
+        request = S3.list_objects(Bucket=BUCKET,
+                                  Prefix=os.path.join(SRC_S3, self.experiment_name,
+                                                      f'v{self.version}'))['Contents']
+        digest_files_s3 = [x['Key'] for x in request if x['Key'].endswith(".dgst")]
+
+        for key in digest_files_s3:
+            # read digest files and get the list of image names
+            # which are listed in a given ds-version
+            obj = S3.get_object(Bucket=BUCKET, Key=key)
+            digest_data = obj['Body'].read()
+            open(hidden_dir + '/' + key.split('/')[-1], 'wb').write(digest_data)
+        return
+
+    def info(self):
+        if not self.experiment_name:
+            print("Experiment Name is not defined")
+            return
+        print(self.experiment_name)
+        print(f"V{self.version}")
+        for cls_name, data in self._read_all_digest().items():
+            print('\t', cls_name, data['count'])
+        return
+
+    def _read_all_digest(self):
+        hidden_dir = os.path.join(self._LOCAL, '.dsworker')
+        res = {}
+        for cls_digest in os.listdir(hidden_dir):
+            text = open(Path(hidden_dir)/cls_digest, 'rb').readlines()
+            text = [(x.replace(b'\n', b'')).decode() for x in text]
+            res[Path(cls_digest).stem] = {'data': text, 'count': len(text)}
+        return res
 
     @staticmethod
     def remove_dstore(src_dir):
@@ -44,7 +82,7 @@ class DataWorker:
         pattern = re.compile("v\d+")
         classes = [x for x in os.listdir(self.src) if not pattern.match(x) \
                    and "models" not in x \
-                   and os.path.isdir(self.src / x)]
+                   and (self.src / x).is_dir()]
         return classes
 
     def _set_classnames_s3(self):
@@ -56,6 +94,7 @@ class DataWorker:
         return [Path(x).stem for x in request]
 
     def _class_digest(self, class_dir, version=None):
+        """ create class digest """
         given_version = self.version if version is None else version
         print("creating v%d digest ..." % given_version)
         dgst_path = self.src/f'v{given_version}'
@@ -141,17 +180,18 @@ class DataWorker:
         return archive_name
 
     def upload_changes(self, files):
+        #TODO add multiprocessing
         S3 = self.client
         print("uploading changes to S3 ...")
         for f in files:
-            S3.upload_file(f, BUCKET, os.path.join(SRC_S3, f.replace(self.LOCAL+'/', "")))
+            S3.upload_file(f, BUCKET, os.path.join(SRC_S3, f.replace(self._LOCAL+'/', "")))
 
         request = self._get_all_s3_objects(S3, Bucket=BUCKET, Prefix=os.path.join(SRC_S3, self.experiment_name))
         stored_images = [Path(x['Key']).name for x in request]
         images = [str(x) for x in self.src.glob('**/*') if x.parent.name in self.classes]
 
         for i, img in enumerate(images):
-            s3_key = os.path.join(SRC_S3, img.replace(self.LOCAL+'/', ""))
+            s3_key = os.path.join(SRC_S3, img.replace(self._LOCAL+'/', ""))
 
             if img.split('/')[-1] in stored_images: continue
             S3.upload_file(str(img), BUCKET, s3_key)
@@ -183,7 +223,7 @@ class DataWorker:
         for cls, images in todel_mapping.items():
             if len(images) == 0: continue
             for img in images:
-                key = os.path.join(self.LOCAL, self.experiment_name, cls, img)
+                key = self.src/cls/img
                 os.remove(key)
                 print("remove from S3 >> ", cls, img)
         print("done!")
@@ -224,7 +264,7 @@ class DataWorker:
         loc_mapping = {}
         for classname in self.classes:
             print('collect ', classname)
-            class_path = (Path(self.LOCAL)/f'{self.experiment_name}/{classname}')
+            class_path = self.src/classname
             class_contents = class_path.rglob("**/*")
             loc_mapping[classname] = [str(x) for x in class_contents]
         return loc_mapping
@@ -278,7 +318,7 @@ class DataWorker:
             # create directories named of classes
             # listed in a given ds-version
             classname = Path(key).stem
-            class_path = os.path.join(self.LOCAL, self.experiment_name, classname)
+            class_path = self.src/classname
             os.makedirs(class_path, exist_ok=True)
 
             # download images
@@ -286,7 +326,7 @@ class DataWorker:
 
             def multy_load(key):
                 if key.suffix not in ['.png', '.jpg']: return
-                targ_name = str(key).replace(SRC_S3, self.LOCAL)
+                targ_name = str(key).replace(SRC_S3, self._LOCAL)
 
                 if key.name in os.listdir(class_path):
                     print('exists! ', targ_name)
@@ -377,14 +417,15 @@ class DataWorker:
                 print('model not found')
 
 
-# if __name__ == "__main__":
-#     import boto3
-#     S3 = boto3.client('s3')
-#
-#     p = '/Users/alinacodzy/Downloads/EXPERIMENTS/TEST'
-#     # DataWorker(S3).experiments_info()
-#     # DataWorker(S3).pull_model('ssdgraph')
-#     # DataWorker(S3, path=p, name='EXP-TECH', version=3).update()
-#     # DataWorker(S3).register_model(run_id='ebe4db8489c94c999c5fdc81e8cd5b7e', exp_id=3)
-#     DataWorker(S3, p, 'EXP-IMG-TYPE', 3).download(deprecated=False)
+if __name__ == "__main__":
+    import boto3
+    S3 = boto3.client('s3')
+
+    p = '/Users/alinacodzy/Downloads/EXPERIMENTS/TEST'
+    # DataWorker(S3).experiments_info()
+    # DataWorker(S3).pull_model('ssdgraph')
+    # DataWorker(S3, path=p, name='EXP-TECH', version=3).update()
+    # DataWorker(S3).register_model(run_id='ebe4db8489c94c999c5fdc81e8cd5b7e', exp_id=3)
+    DataWorker(S3, p, 'EXP-IMG-TYPE', 2).info()
+    # DataWorker(S3, p, 'EXP-IMG-TYPE', 3).download(deprecated=False)
 
