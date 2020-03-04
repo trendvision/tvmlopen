@@ -21,10 +21,8 @@ class DataWorker:
         self.LOCAL = path
         self.experiment_name = name
         self.src = Path(self.LOCAL) / self.experiment_name if path else None
-        self.classes = self._set_classnames() if path else None
-        # устанавливается следующий номер версии
         self.version = version if version else self.new_version_number()
-        # self.version = version if version else self.existing_versions()
+        self.classes = self._set_classnames_s3() if version else None
 
 
     def __repr__(self):
@@ -48,6 +46,14 @@ class DataWorker:
                    and "models" not in x \
                    and os.path.isdir(self.src / x)]
         return classes
+
+    def _set_classnames_s3(self):
+        S3 = self.client
+        digest_path = os.path.join(SRC_S3, self.experiment_name, f'v{self.version}')
+        request = [x['Key'] for x in S3.list_objects(Bucket=BUCKET, Prefix=digest_path)['Contents'] \
+                   if x['Key'].endswith('.dgst')]
+        if len(request) == 0: return None
+        return [Path(x).stem for x in request]
 
     def _class_digest(self, class_dir, version=None):
         given_version = self.version if version is None else version
@@ -183,16 +189,23 @@ class DataWorker:
         print("done!")
 
     def _version_file_mapping(self):
+        from botocore.errorfactory import ClientError
         _version = self.version
 
         def read_digest_file(class_name):
             S3 = self.client
             path = os.path.join(SRC_S3, self.experiment_name,
                                 f'v{_version}', class_name + '.dgst')
-            obj = S3.get_object(Bucket=BUCKET, Key=path)
-            digest_data = obj['Body'].read()
-            img_names = digest_data.decode().split('\n')
-            return img_names
+            try:
+                obj = S3.get_object(Bucket=BUCKET, Key=path)
+                digest_data = obj['Body'].read()
+                img_names = digest_data.decode().split('\n')
+                return img_names
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'NoSuchKey':
+                    print('Digest file is not found on S3. Probably \
+                    current version doesn\'t contain class %s' %class_name)
+
 
         return {cls: read_digest_file(cls) for cls in self.classes}
 
@@ -256,9 +269,6 @@ class DataWorker:
                                                       f'v{version}'))['Contents']
         digest_files_s3 = [x['Key'] for x in request if x['Key'].endswith(".dgst")]
 
-        # already_loaded = filter(lambda x: x.suffix in ['.png', '.jpg'],
-        #                         (Path(self.LOCAL) / self.experiment_name).glob('**/*'))
-
         for key in digest_files_s3:
             # read digest files and get the list of image names
             # which are listed in a given ds-version
@@ -269,25 +279,32 @@ class DataWorker:
             # create directories named of classes
             # listed in a given ds-version
             classname = Path(key).stem
-            # classname = classname.replace('.dgst', '')
             class_path = os.path.join(self.LOCAL, self.experiment_name, classname)
             os.makedirs(class_path, exist_ok=True)
 
             # download images
             img_keys = [Path(SRC_S3)/f"{self.experiment_name}/{classname}/{img}" for img in img_names]
-            for key in img_keys:
-                if key.suffix not in ['.png', '.jpg']: continue
+
+            def multy_load(key):
+                if key.suffix not in ['.png', '.jpg']: return
                 targ_name = str(key).replace(SRC_S3, self.LOCAL)
 
                 if key.name in os.listdir(class_path):
                     print('exists! ', targ_name)
-                    continue  # if already exist on local
+                    return  # if already exist on local
                 try:
                     S3.download_file(BUCKET, str(key), targ_name)
                     print("downloaded ", str(key))
                 except Exception as e:
                     print(e, key)
-                    continue
+                    return
+
+            from multiprocessing.pool import ThreadPool
+
+            pool = ThreadPool(processes=4)
+            pool.map(multy_load, img_keys)
+            pool.close()
+            print('Downloaded!')
 
     def export_model_to_s3(self, model_path=None):
         BUCKET = 'disk-barbacane-test'
@@ -361,14 +378,14 @@ class DataWorker:
                 print('model not found')
 
 
-# if __name__ == "__main__":
-#     import boto3
-#     S3 = boto3.client('s3')
-#
-#     p = '/Users/alinacodzy/Downloads/EXPERIMENTS/TEST'
-#     # DataWorker(S3).experiments_info()
-#     # DataWorker(S3).pull_model('ssdgraph')
-#     # DataWorker(S3, path=p, name='EXP-TECH', version=3).update()
-#     # DataWorker(S3).register_model(run_id='ebe4db8489c94c999c5fdc81e8cd5b7e', exp_id=3)
-#     DataWorker(S3, p, 'EXP-IMG-TYPE', 2).download()
+if __name__ == "__main__":
+    import boto3
+    S3 = boto3.client('s3')
+
+    p = '/Users/alinacodzy/Downloads/EXPERIMENTS/TEST'
+    # DataWorker(S3).experiments_info()
+    # DataWorker(S3).pull_model('ssdgraph')
+    # DataWorker(S3, path=p, name='EXP-TECH', version=3).update()
+    # DataWorker(S3).register_model(run_id='ebe4db8489c94c999c5fdc81e8cd5b7e', exp_id=3)
+    DataWorker(S3, p, 'EXP-IMG-TYPE', 3).download(deprecated=False)
 
