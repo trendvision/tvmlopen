@@ -20,12 +20,13 @@ class DataWorker:
         self.client = s3_client
         self._LOCAL = path
         self.experiment_name = name
-        self.version = version if version else self.new_version_number()
+        self.version = version # if version else self.new_version_number()
 
-        self.src = Path(self._LOCAL) / self.experiment_name if path else None
-        self.classes = self._set_classnames_s3() if version else None
 
-        self._pull_digest()
+        if all([path, name, version]):
+            self.src = Path(self._LOCAL) / self.experiment_name if path else None
+            self.classes = self._set_classnames_s3() if version else None
+            self._pull_digest()
 
     def __repr__(self):
         return f"experiment :  {self.experiment_name}\n" \
@@ -129,18 +130,11 @@ class DataWorker:
             continuation_token = response.get('NextContinuationToken')
 
     def new_version_number(self):
+        # TODO: удрать зависимость от локалки
         pattern = re.compile("v\d+")
         versions = [int(x.replace('v', '')) for x in os.listdir(self.src) if pattern.match(x)]
         if versions == []: return 1
         return sorted(versions)[-1] + 1
-
-    def existing_versions(self):
-        path = Path(SRC_S3)/f'{self.experiment_name}'
-        pattern = re.compile(f"v\d+")
-        # versions = [x['Key'] for x in S3.list_objects(Bucket=BUCKET,
-        #                                               Prefix=str(path))['Contents'] if pattern.match(x['Key'])]
-        # return max([int(x.replace('v', '')) for x in self.version]) if versions != [] else 0
-        return
 
     def _compose_dataset(self):
         """ on local !!!! """
@@ -155,30 +149,6 @@ class DataWorker:
             os.makedirs(self.src/'dataset'/cls, exist_ok=True)
             for s, t in zip(file_names, targ_names): copyfile(s, t)
 
-    def compose_dataset_remote(self):
-        """ ненужное гавно """
-        S3 = self.client
-        for cls in self.classes:
-            digest_path = Path(SRC_S3)/self.experiment_name/f"v{self.version}/{cls}.dgst"
-            print(digest_path)
-            obj = S3.get_object(Bucket=BUCKET, Key=str(digest_path))
-            list_filenames = obj["Body"].read().decode().split("\n")
-            old_image_paths = [Path(SRC_S3)/self.experiment_name/cls/x for x in list_filenames]
-
-            new_prefix = Path(SRC_S3)/self.experiment_name/f"dataset_v{self.version}/{cls}"
-            new_image_paths = [new_prefix/x for x in list_filenames]
-
-            already_have = [Path(x['Key']).name for x in \
-                            self._get_all_s3_objects(S3, Bucket=BUCKET, Prefix=str(new_prefix))]
-
-            for src, targ in zip(old_image_paths, new_image_paths):
-                if src.suffix not in ['.png', '.jpg']: continue
-                if targ.name in already_have:
-                    print("skip")
-                    continue
-                copy_source = {"Bucket": BUCKET, "Key": str(src)}
-                S3.copy(CopySource=copy_source, Bucket=BUCKET, Key=str(targ))
-                print(targ)
 
     def _compress_dataset(self):
         from shutil import make_archive
@@ -375,8 +345,11 @@ class DataWorker:
         model_path = os.path.join('prodmodels', experiment_name)
         request = filter(lambda x: not x['Key'].endswith('/'),
                          S3.list_objects(Bucket=BUCKET, Prefix=model_path)['Contents'])
-
-        model_path = [obj['Key'] for obj in sorted(request, key=lambda x: x['LastModified'])][0]
+        try:
+            model_path = [obj['Key'] for obj in sorted(request, key=lambda x: x['LastModified'])][0]
+        except IndexError:
+            print("No model found for %s experiment" % experiment_name)
+            return None
         model_name = model_path.split("/")[-1]
         if targ_path: model_name = os.path.join(targ_path, model_name)
         S3.download_file(BUCKET, model_path, model_name)
@@ -420,6 +393,9 @@ class DataWorker:
 #     import boto3
 #     S3 = boto3.client('s3')
 #
+#     w = DataWorker(S3)
+#     print(w.experiments_info())
+#     w.pull_model('trasher', '/Users/alinacodzy/Downloads/')
 #     p = '/Users/alinacodzy/Downloads/EXPERIMENTS/TEST'
 #     # DataWorker(S3).experiments_info()
 #     # DataWorker(S3).pull_model('ssdgraph')

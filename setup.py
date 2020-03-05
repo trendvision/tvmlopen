@@ -3,7 +3,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 setup_args = dict(
      name='tvml',
-     version='0.1.6.5',
+     version='0.1.6.6',
      packages=['tvml'],
      author="Pazlvbanke",
      author_email="pazlvbanke@yandex.ru",
