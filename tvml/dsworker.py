@@ -36,6 +36,7 @@ class DataWorker:
         hidden_dir = os.path.join(self._LOCAL, '.dsworker')
         os.makedirs(hidden_dir, exist_ok=True)
 
+        S3 = self.client
         request = S3.list_objects(Bucket=BUCKET,
                                   Prefix=os.path.join(SRC_S3, self.experiment_name,
                                                       f'v{self.version}'))['Contents']
