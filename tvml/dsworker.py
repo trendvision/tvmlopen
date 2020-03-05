@@ -343,12 +343,15 @@ class DataWorker:
         S3 = self.client
 
         model_path = os.path.join('prodmodels', experiment_name)
-        request = filter(lambda x: not x['Key'].endswith('/'),
-                         S3.list_objects(Bucket=BUCKET, Prefix=model_path)['Contents'])
+
         try:
+            request = filter(lambda x: not x['Key'].endswith('/'),
+                             S3.list_objects(Bucket=BUCKET, Prefix=model_path)['Contents'])
             model_path = [obj['Key'] for obj in sorted(request, key=lambda x: x['LastModified'])][0]
-        except IndexError:
-            print("No model found for %s experiment" % experiment_name)
+        except (KeyError, IndexError):
+            print("No model seems to be found for %s experiment" % experiment_name)
+            print("Call experiments_info() to get list of experiments")
+
             return None
         model_name = model_path.split("/")[-1]
         if targ_path: model_name = os.path.join(targ_path, model_name)
@@ -392,10 +395,6 @@ class DataWorker:
 # if __name__ == "__main__":
 #     import boto3
 #     S3 = boto3.client('s3')
-#
-#     w = DataWorker(S3)
-#     print(w.experiments_info())
-#     w.pull_model('trasher', '/Users/alinacodzy/Downloads/')
 #     p = '/Users/alinacodzy/Downloads/EXPERIMENTS/TEST'
 #     # DataWorker(S3).experiments_info()
 #     # DataWorker(S3).pull_model('ssdgraph')
