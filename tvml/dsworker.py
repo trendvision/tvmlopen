@@ -172,7 +172,7 @@ class DataWorker:
             i, key = args
             s3_key = os.path.join(SRC_S3, key.replace(self._LOCAL + '/', ""))
             if key.split('/')[-1] in stored_images: return
-            S3.upload_file(str(img), BUCKET, s3_key)
+            S3.upload_file(str(key), BUCKET, s3_key)
             print(f"{i}/{len(images)} upl >> ", Path(key).name)
             return
 
@@ -191,14 +191,16 @@ class DataWorker:
         #     print(f"{i}/{len(images)} upl >> ", Path(img).name)
         return
 
-    def update(self):
+    def update(self, target_version=None):
         """
             объект-датасет обновляется всем, что найдет нового в папке
             - создаст новую папку версии со слепком нового датасета,
             - новые картинки зальет в общую папку,
             - слепки отправит на s3
         """
-        version = self.new_version_number()
+        version = self.version
+        # version = self.new_version_number()
+        # version = target_version
         digest_file_paths = []
         for cls in self.classes:
             digest_file_paths.append(self._class_digest(self.src/cls, version))
@@ -392,14 +394,17 @@ class DataWorker:
                 print('model not found')
 
 
-# if __name__ == "__main__":
-#     import boto3
-#     S3 = boto3.client('s3')
-#     p = '/Users/alinacodzy/Downloads/EXPERIMENTS/TEST'
+if __name__ == "__main__":
+    import boto3
+    S3 = boto3.client('s3')
+    p = '/Users/alinacodzy/Downloads/EXPERIMENTS/TECH'
+    # DataWorker(S3, path=p, name='EXP-TECH', version=4).update()
 #     # DataWorker(S3).experiments_info()
 #     # DataWorker(S3).pull_model('ssdgraph')
-#     # DataWorker(S3, path=p, name='EXP-TECH', version=3).update()
+
+
 #     # DataWorker(S3).register_model(run_id='ebe4db8489c94c999c5fdc81e8cd5b7e', exp_id=3)
-#     # DataWorker(S3, p, 'EXP-IMG-TYPE', 2).info()
+    DataWorker(S3, p, 'EXP-TECH', 3).info()
+    DataWorker(S3, p, 'EXP-TECH', 4).info()
 #     DataWorker(S3, p, 'EXP-IMG-TYPE', 3).download(deprecated=True)
 #
